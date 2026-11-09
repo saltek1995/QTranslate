@@ -26,6 +26,7 @@ import com.github.ahatem.qtranslate.ui.swing.main.input.MouseButtonId
 import com.github.ahatem.qtranslate.ui.swing.main.input.QInputBackend
 import com.github.ahatem.qtranslate.ui.swing.main.input.SelectionGestureTracker
 import com.github.ahatem.qtranslate.ui.swing.main.input.KeyboardSelectionTracker
+import com.github.ahatem.qtranslate.ui.swing.main.input.OwnedCopyEventFilter
 import com.github.ahatem.qtranslate.ui.swing.shared.clipboard.AwtSystemClipboard
 import com.github.ahatem.qtranslate.ui.swing.shared.clipboard.CaptureFailure
 import com.github.ahatem.qtranslate.ui.swing.shared.clipboard.CaptureResult
@@ -92,12 +93,16 @@ class MainGlobalKeyListener(
     private val isMac: Boolean = QInputCopyInjector.currentPlatformIsMac(),
     private val pointerLocation: () -> Point? = { runCatching { MouseInfo.getPointerInfo()?.location }.getOrNull() },
     private val onValidatedSelection: ((String, Point, () -> Boolean) -> Unit)? = null,
+    private val windowsKeyboardSelection: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true),
+    private val fallbackCopy: (() -> Boolean)? = null,
 ) {
 
     private var backend: GlobalInputBackend? = null
     private val detector = DoubleCtrlDetector()
     private val gestureTracker = SelectionGestureTracker()
     private val keyboardSelectionTracker = KeyboardSelectionTracker()
+    private val ownedCopyEvents = OwnedCopyEventFilter()
+    private val keyboardObservationReported = AtomicBoolean(false)
     private val automaticCaptureLock = Any()
     private var automaticCaptureJob: Job? = null
     private val automaticCaptureGeneration = AtomicLong()
@@ -201,7 +206,7 @@ class MainGlobalKeyListener(
             try {
                 val created = (backendFactory ?: { QInputBackend(logger) })()
                 backend = created
-                copyInjector = QInputCopyInjector({ backend }, logger, isMac = isMac)
+                copyInjector = QInputCopyInjector({ backend }, logger, isMac = isMac, fallback = ::simulateFallbackCopy)
                 created.setListener { handleGlobalEvent(it) }
                 logger.info("Global input backend: ${created.backendName} ${created.capabilities}")
                 reportCapabilities(created.capabilities)
@@ -292,6 +297,7 @@ class MainGlobalKeyListener(
         reconcileLock.withLock {
             synchronized(automaticCaptureLock) {
                 initialized.set(false)
+                ownedCopyEvents.clear()
                 cancelAutomaticCapture()
                 keyboardSelectionTracker.reset()
                 gestureTracker.reset()
@@ -612,18 +618,37 @@ class MainGlobalKeyListener(
         // QInput's own synthetic input never counts as genuine Double Ctrl input; third-party
         // injected input (remappers, clipboard tools) still passes through like physical keys.
         if (event.selfInjected) return
+        val observed = if (windowsKeyboardSelection) ownedCopyEvents.filter(event) else listOf(event)
+        observed.forEach(::handleObservedKey)
+    }
+
+    private fun handleObservedKey(event: GlobalInputEvent.Key) {
         val selected = synchronized(automaticCaptureLock) {
-            if (!event.injected && initialized.get() && runtimeState.selectionCaptureEnabled && !runtimeState.paused) {
+            if ((!event.injected || windowsKeyboardSelection) && initialized.get() && runtimeState.selectionCaptureEnabled && !runtimeState.paused) {
+                if (keyboardObservationReported.compareAndSet(false, true)) {
+                    logger.info("Automatic keyboard observation active (externalInjection=${event.injected})")
+                }
                 if (event.pressed) {
                     cancelAutomaticCapture()
                     gestureTracker.reset()
                 }
-                if (keyboardSelectionTracker.onKey(event)) automaticCaptureGeneration.get() else null
+                val wasPending = keyboardSelectionTracker.isPending
+                val completed = keyboardSelectionTracker.onKey(event)
+                if (!wasPending && keyboardSelectionTracker.isPending) {
+                    logger.info("Keyboard selection tracking started")
+                } else if (keyboardSelectionTracker.isPending && !event.pressed) {
+                    logger.info("Keyboard selection waiting for key release (heldKeys=${keyboardSelectionTracker.heldKeyCount})")
+                }
+                if (completed) automaticCaptureGeneration.get() else null
             } else null
         }
         if (selected != null) {
-            pointerLocation()?.let { location ->
-                if (shouldTrackSelectionAt(location)) scheduleAutomaticCapture(location, selected)
+            logger.info("Keyboard selection gesture completed")
+            val location = pointerLocation()
+            when {
+                location == null -> logger.warn("Keyboard selection capture skipped: pointer unavailable")
+                !shouldTrackSelectionAt(location) -> logger.info("Keyboard selection capture skipped: application window active")
+                else -> scheduleAutomaticCapture(location, selected)
             }
         }
         if (event.keyClass == KeyClass.CONTROL) {
@@ -929,6 +954,18 @@ class MainGlobalKeyListener(
      * since the injector already owns its complete attempt including any fallback.
      */
     private fun simulateCopy(): Boolean = copyInjector.injectCopy()
+
+    private fun simulateFallbackCopy(): Boolean {
+        if (windowsKeyboardSelection) ownedCopyEvents.begin()
+        return try {
+            val delivered = fallbackCopy?.invoke() ?: RobotCopyInjector(logger, isMac = isMac).injectCopy()
+            if (!delivered) ownedCopyEvents.abort()
+            delivered
+        } catch (failure: Exception) {
+            ownedCopyEvents.abort()
+            throw failure
+        }
+    }
 
     internal companion object {
         /** Actions that capture selected text when fired from a global hotkey. */

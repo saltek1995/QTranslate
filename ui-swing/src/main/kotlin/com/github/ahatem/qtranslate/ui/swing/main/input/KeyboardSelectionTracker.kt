@@ -1,7 +1,7 @@
 package com.github.ahatem.qtranslate.ui.swing.main.input
 
 /** Editing keys normalized at the native adapter boundary; ordinary text is never retained. */
-enum class SelectionKey { OTHER, SELECT_ALL, NAVIGATION }
+enum class SelectionKey { OTHER, SELECT_ALL, NAVIGATION, COPY }
 
 /**
  * Windows virtual keys used by selection. Other backends must not interpret their native
@@ -10,6 +10,7 @@ enum class SelectionKey { OTHER, SELECT_ALL, NAVIGATION }
 internal object WindowsSelectionKeys {
     fun classify(code: Int): SelectionKey = when (code) {
         0x41 -> SelectionKey.SELECT_ALL
+        0x43 -> SelectionKey.COPY
         in 0x21..0x28 -> SelectionKey.NAVIGATION // Page Up/Down, End/Home, arrows
         else -> SelectionKey.OTHER
     }
@@ -17,15 +18,17 @@ internal object WindowsSelectionKeys {
 
 /**
  * Recognizes completed keyboard selections without consuming any editing key. Modifier and
- * selecting-key releases complete a gesture; repeat presses extend it. Injected events are
- * ignored so synthetic Copy cannot recursively request capture.
+ * selecting-key releases complete a gesture; repeat presses extend it. QInput-owned injection
+ * is ignored; external remappers remain ordinary editing input.
  */
 internal class KeyboardSelectionTracker {
     private val held = mutableMapOf<Int, Pair<KeyClass, SelectionKey>>()
     private var pending = false
+    val isPending: Boolean get() = pending
+    val heldKeyCount: Int get() = held.size
 
     fun onKey(event: GlobalInputEvent.Key): Boolean {
-        if (event.injected || event.selfInjected) return false
+        if (event.selfInjected) return false
         if (event.pressed) {
             held[event.nativeCode] = event.keyClass to event.selectionKey
             val shift = held.values.any { it.first == KeyClass.SHIFT }

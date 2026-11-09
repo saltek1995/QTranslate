@@ -18,7 +18,8 @@ reproduced on Windows.
 1. Extend selection gestures to double/triple clicks, with monotonic time and distance
    bounds. Detect Windows Shift+navigation and Ctrl+A without registering/consuming those
    ordinary editing shortcuts. Coalesce automatic captures and cancel stale requests on
-   subsequent user input, configuration changes, or shutdown. Ignore injected events.
+   subsequent user input, configuration changes, or shutdown. Ignore app-owned injection while
+   accepting external editing input, including remote-control input.
 2. Retain native clipboard generations when available. If the initial native observation is
    unavailable, use a content-signature monitor for that entire capture transaction. Retry
    the native monitor on the next transaction; never compare tokens across monitors, accept
@@ -62,7 +63,7 @@ include gated lifecycle races, deferred UI delivery, actual AWT Transferable fai
 PowerShell executed with stubbed scheduler mutations on Windows. These tests do not prove a real
 sign-out/sign-in, elevation consent or physical keyboard input on the user's installed copy.
 
-Fork build identity: `1.5.0-saltek.2`. Runtime/About and release validation use the same version.
+Fork build identity: `1.5.0-saltek.3`. Runtime/About and release validation use the same version.
 An elevated application can create the Highest task; an ordinary application creates a Limited
 interactive task and preserves an already configured matching Highest task. Windows does not allow
 an ordinary process to silently grant itself elevated startup rights.
@@ -74,3 +75,24 @@ actual tray installation and only shows the window when needed; it never hides a
 request that arrived while initialization was queued. Tests cover migration, persistence, checkbox
 placement and draft behavior, failed tray installation, and early restore ordering without desktop
 automation.
+
+## Remote keyboard input and plugin upgrades
+
+The user confirmed that QTranslate runs on another PC controlled remotely. The earlier keyboard
+path discarded every externally injected key, although QInput separately tags its own injection.
+The Windows path now accepts external editing input. Native owned Copy stays excluded by its tag;
+Robot fallback uses bounded FIFO matching with prefix replay so delayed Copy events do not cancel
+the latest result, and a failed attempt does not swallow a user's Ctrl+A. The actual user's native
+flags remain unobserved; safe stage diagnostics record completion, held-key counts, pointer/focus
+rejections, and the first event's external-injection flag, never text or ordinary keycodes.
+
+All 13 provider JARs from saltek.2 differ from upstream solely in resource line endings; their class
+contents are unchanged. That correctly triggered the existing approved-hash verification. The user
+accepted the updates and translation resumed. Subsequent packaging therefore preserves those exact
+saltek.2 provider bytes when plugin/API/build inputs have not changed. The baseline archive SHA-256,
+source commit, complete JAR inventory, tracked diffs, and untracked source additions are checked.
+No application trust checks or saved approvals are bypassed.
+
+The release probe supports an optional approved-fingerprint fixture to exercise this upgrade path
+and verify retained per-plugin settings. It always creates fresh temporary app data and never seeds
+the distribution's user data. Normal application startup does not consume that probe fixture.

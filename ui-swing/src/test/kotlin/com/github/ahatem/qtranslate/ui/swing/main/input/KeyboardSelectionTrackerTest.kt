@@ -33,9 +33,10 @@ class KeyboardSelectionTrackerTest {
         assertTrue(tracker.onKey(key(0xa0, false, KeyClass.SHIFT)))
     }
     private fun key(code: Int, pressed: Boolean, keyClass: KeyClass = KeyClass.OTHER,
-                    injected: Boolean = false) = GlobalInputEvent.Key(
+                    injected: Boolean = false, selfInjected: Boolean = false) = GlobalInputEvent.Key(
         keyClass, code, pressed, injected, repeat = false, timestampMs = 0L,
         selectionKey = WindowsSelectionKeys.classify(code),
+        selfInjected = selfInjected,
     )
 
     @Test
@@ -86,10 +87,10 @@ class KeyboardSelectionTrackerTest {
         tracker.onKey(key(0x25, false))
         tracker.onKey(key(0xa4, false, KeyClass.ALT))
         assertFalse(tracker.onKey(key(0xa0, false, KeyClass.SHIFT)))
-        tracker.onKey(key(0xa2, true, KeyClass.CONTROL, injected = true))
-        tracker.onKey(key(0x41, true, injected = true))
-        tracker.onKey(key(0x41, false, injected = true))
-        assertFalse(tracker.onKey(key(0xa2, false, KeyClass.CONTROL, injected = true)))
+        tracker.onKey(key(0xa2, true, KeyClass.CONTROL, injected = true, selfInjected = true))
+        tracker.onKey(key(0x41, true, injected = true, selfInjected = true))
+        tracker.onKey(key(0x41, false, injected = true, selfInjected = true))
+        assertFalse(tracker.onKey(key(0xa2, false, KeyClass.CONTROL, injected = true, selfInjected = true)))
         tracker.onKey(key(0xa0, true, KeyClass.SHIFT))
         tracker.onKey(key(0x25, true))
         tracker.reset()

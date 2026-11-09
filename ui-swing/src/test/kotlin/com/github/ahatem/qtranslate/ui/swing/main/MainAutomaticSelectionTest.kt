@@ -12,7 +12,10 @@ import kotlinx.coroutines.test.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainAutomaticSelectionTest {
-    private class Harness(scope: TestScope, pointer: () -> Point? = { Point(50, 50) }, queued: Boolean = false) {
+    private class Harness(
+        scope: TestScope, pointer: () -> Point? = { Point(50, 50) }, queued: Boolean = false,
+        robotFallback: ((FakeGlobalInputBackend) -> Boolean)? = null,
+    ) {
         val backend = FakeGlobalInputBackend()
         val clipboard = RecordingClipboard("original")
         var copies = 0
@@ -30,19 +33,20 @@ class MainAutomaticSelectionTest {
                     if (injected) { monitor.current++; clipboard.simulateExternalCopy("selected") }
                     injected
                 }, logger)
-            }, isMac = false,
+            }, isMac = false, windowsKeyboardSelection = true,
+            fallbackCopy = { copies++; robotFallback?.invoke(backend) ?: true },
         )
         init {
             listener.updateRuntimeState(InputRuntimeState(selectionCaptureEnabled = true))
             listener.initialize()
-            listener.copyInjector = CopyInjector { copies++; true }
+            if (robotFallback == null) listener.copyInjector = CopyInjector { copies++; true }
         }
-        fun key(code: Int, down: Boolean, kind: KeyClass = KeyClass.OTHER, injected: Boolean = false) =
+        fun key(code: Int, down: Boolean, kind: KeyClass = KeyClass.OTHER, injected: Boolean = false, selfInjected: Boolean = false) =
             backend.emit(GlobalInputEvent.Key(kind, code, down, injected, false, timestampMs = 0L,
-                selectionKey = WindowsSelectionKeys.classify(code)))
-        fun selectAll() {
-            key(0xa2, true, KeyClass.CONTROL); key(0x41, true)
-            key(0x41, false); key(0xa2, false, KeyClass.CONTROL)
+                selectionKey = WindowsSelectionKeys.classify(code), selfInjected = selfInjected))
+        fun selectAll(injected: Boolean = false, selfInjected: Boolean = false) {
+            key(0xa2, true, KeyClass.CONTROL, injected, selfInjected); key(0x41, true, injected = injected, selfInjected = selfInjected)
+            key(0x41, false, injected = injected, selfInjected = selfInjected); key(0xa2, false, KeyClass.CONTROL, injected, selfInjected)
         }
         fun click() {
             backend.emit(GlobalInputEvent.MouseButton(MouseButtonId.LEFT, true, Point(50, 50)))
@@ -59,15 +63,43 @@ class MainAutomaticSelectionTest {
         h.listener.shutdown()
     }
 
-    @Test fun `keyboard selection captures but ordinary typing and injection do not`() = runTest {
+    @Test fun `keyboard selection captures but ordinary typing and owned injection do not`() = runTest {
         val h = Harness(this)
         h.selectAll(); advanceUntilIdle(); assertEquals(1, h.selections)
         h.key(0xa0, true, KeyClass.SHIFT); h.key(0x27, true); h.key(0x27, false)
         h.key(0xa0, false, KeyClass.SHIFT); advanceUntilIdle(); assertEquals(2, h.selections)
         h.key(0x42, true); h.key(0x42, false)
-        h.key(0xa2, true, KeyClass.CONTROL, true); h.key(0x41, true, injected = true)
-        h.key(0x41, false, injected = true); h.key(0xa2, false, KeyClass.CONTROL, true)
+        h.selectAll(injected = true, selfInjected = true)
         advanceUntilIdle(); assertEquals(2, h.copies)
+        h.listener.shutdown()
+    }
+
+    @Test fun `external injected selection works and external typing cancels it`() = runTest {
+        val h = Harness(this)
+        h.selectAll(injected = true); advanceUntilIdle(); assertEquals(1, h.selections)
+        h.key(0xa0, true, KeyClass.SHIFT, true)
+        h.key(0x27, true, injected = true); h.key(0x27, false, injected = true)
+        h.key(0xa0, false, KeyClass.SHIFT, true)
+        advanceUntilIdle(); assertEquals(2, h.selections)
+        h.selectAll(injected = true); h.key(0x42, true, injected = true)
+        advanceUntilIdle(); assertEquals(2, h.copies)
+        h.listener.shutdown()
+    }
+
+    @Test fun `owned untagged Robot copy cannot cancel its automatic capture`() = runTest {
+        val h = Harness(this, robotFallback = { backend ->
+            for ((code, down) in listOf(0xa2 to true, 0x43 to true, 0x43 to false, 0xa2 to false)) {
+                backend.emit(GlobalInputEvent.Key(
+                    if (code == 0xa2) KeyClass.CONTROL else KeyClass.OTHER,
+                    code, down, injected = true, repeat = false, timestampMs = 0,
+                    selectionKey = WindowsSelectionKeys.classify(code),
+                ))
+            }
+            true
+        })
+        h.selectAll(injected = true); advanceUntilIdle()
+        assertEquals(1, h.copies); assertEquals(1, h.selections)
+        assertEquals("original", h.clipboard.text)
         h.listener.shutdown()
     }
 
@@ -76,6 +108,29 @@ class MainAutomaticSelectionTest {
         h.selectAll(); h.key(0x42, true); advanceUntilIdle(); assertEquals(0, h.copies)
         h.key(0x42, false); h.selectAll(); advanceUntilIdle(); assertEquals(1, h.deliveries.size)
         h.key(0x43, true); h.deliveries.forEach { it() }; assertEquals(0, h.selections)
+        h.listener.shutdown()
+    }
+
+    @Test fun `delayed fallback copy events cannot invalidate the newest queued result`() = runTest {
+        val delayed = mutableListOf<() -> Unit>()
+        val h = Harness(this, queued = true, robotFallback = { backend ->
+            delayed += {
+                for ((code, down) in listOf(0xa2 to true, 0x43 to true, 0x43 to false, 0xa2 to false)) {
+                    backend.emit(GlobalInputEvent.Key(
+                        if (code == 0xa2) KeyClass.CONTROL else KeyClass.OTHER,
+                        code, down, injected = true, repeat = false, timestampMs = 0,
+                        selectionKey = WindowsSelectionKeys.classify(code),
+                    ))
+                }
+            }
+            true
+        })
+        h.selectAll(injected = true); advanceUntilIdle()
+        h.selectAll(injected = true); advanceUntilIdle()
+        assertEquals(2, h.copies)
+        delayed.forEach { it() }
+        h.deliveries.forEach { it() }
+        assertEquals(1, h.selections)
         h.listener.shutdown()
     }
 
