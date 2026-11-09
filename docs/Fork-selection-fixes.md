@@ -63,7 +63,7 @@ include gated lifecycle races, deferred UI delivery, actual AWT Transferable fai
 PowerShell executed with stubbed scheduler mutations on Windows. These tests do not prove a real
 sign-out/sign-in, elevation consent or physical keyboard input on the user's installed copy.
 
-Fork build identity: `1.5.0-saltek.3`. Runtime/About and release validation use the same version.
+Release identity: `1.5.1`. Runtime/About and release validation use the same version.
 An elevated application can create the Highest task; an ordinary application creates a Limited
 interactive task and preserves an already configured matching Highest task. Windows does not allow
 an ordinary process to silently grant itself elevated startup rights.
@@ -86,10 +86,10 @@ the latest result, and a failed attempt does not swallow a user's Ctrl+A. The ac
 flags remain unobserved; safe stage diagnostics record completion, held-key counts, pointer/focus
 rejections, and the first event's external-injection flag, never text or ordinary keycodes.
 
-All 13 provider JARs from saltek.2 differ from upstream solely in resource line endings; their class
+All 13 provider JARs from the previously approved candidate differ from upstream solely in resource line endings; their class
 contents are unchanged. That correctly triggered the existing approved-hash verification. The user
 accepted the updates and translation resumed. Subsequent packaging therefore preserves those exact
-saltek.2 provider bytes when plugin/API/build inputs have not changed. The baseline archive SHA-256,
+approved provider bytes when plugin/API/build inputs have not changed. The baseline archive SHA-256,
 source commit, complete JAR inventory, tracked diffs, and untracked source additions are checked.
 No application trust checks or saved approvals are bypassed.
 
