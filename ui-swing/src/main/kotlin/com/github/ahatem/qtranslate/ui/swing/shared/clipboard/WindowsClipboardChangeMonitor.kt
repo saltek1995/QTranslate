@@ -18,7 +18,9 @@ import com.sun.jna.win32.StdCallLibrary
  */
 internal class WindowsClipboardChangeMonitor internal constructor(
     private val user32: User32,
+    private val logger: Logger? = null,
 ) : ClipboardChangeMonitor {
+    private var lastFailure: String? = null
 
     /**
      * Null when the sequence cannot be observed. The native API returns zero on failure,
@@ -26,9 +28,19 @@ internal class WindowsClipboardChangeMonitor internal constructor(
      * unequal to almost anything and fabricate changes.
      */
     override fun mark(): Long? {
-        val sequence = runCatching { user32.GetClipboardSequenceNumber().toLong() }.getOrNull()
-            ?: return null
-        return sequence.takeIf { it != 0L }
+        val result = runCatching { user32.GetClipboardSequenceNumber().toLong() and 0xffffffffL }
+        val sequence = result.getOrNull()
+        val failure = when {
+            result.isFailure -> result.exceptionOrNull()?.javaClass?.simpleName ?: "native call failed"
+            sequence == 0L -> "zero sequence number"
+            else -> null
+        }
+        if (failure != lastFailure) {
+            // Class/reason only: exception messages may contain private paths or user data.
+            if (failure != null) logger?.warn("Windows clipboard counter unavailable ($failure)")
+            lastFailure = failure
+        }
+        return if (failure == null) sequence else null
     }
 
     override fun hasChangedSince(token: Long): Boolean = mark()?.let { it != token } ?: false
@@ -40,9 +52,9 @@ internal class WindowsClipboardChangeMonitor internal constructor(
     companion object {
         /** Null when user32 cannot be loaded, so the caller can fall back. */
         fun create(logger: Logger): WindowsClipboardChangeMonitor? = try {
-            WindowsClipboardChangeMonitor(Native.load("user32", User32::class.java))
+            WindowsClipboardChangeMonitor(Native.load("user32", User32::class.java), logger)
         } catch (t: Throwable) {
-            logger.warn("Windows clipboard sequence number unavailable: ${t.message}")
+            logger.warn("Windows clipboard sequence binding unavailable (${t.javaClass.simpleName})")
             null
         }
     }

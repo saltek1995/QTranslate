@@ -38,7 +38,9 @@ class WindowsStartupRegistration(
     private val commandRunner: (List<String>) -> CommandResult = ::runCommand,
     private val osName: String = System.getProperty("os.name").orEmpty(),
     private val launcherCommand: () -> String? = ::resolveLauncherCommand,
-    private val valueName: String = VALUE_NAME
+    private val valueName: String = VALUE_NAME,
+    private val loginTask: ((enabled: Boolean, command: String?) -> Boolean)? = null,
+    private val loginTaskAbsent: () -> Boolean = { false },
 ) {
     /** The outcome of one `reg.exe` invocation. */
     data class CommandResult(val exitCode: Int, val output: String)
@@ -56,6 +58,21 @@ class WindowsStartupRegistration(
     fun reconcile(desiredEnabled: Boolean): Boolean {
         if (!isSupported()) return true
         return runCatching {
+            loginTask?.let { registerTask ->
+                val command = if (desiredEnabled) launcherCommand() ?: return false else null
+                val taskOk = registerTask(desiredEnabled, command)
+                if (taskOk) {
+                    // A scheduled launch and a Run entry must not race to start two instances.
+                    return removeLegacyRunEntry()
+                }
+                if (!desiredEnabled) {
+                    setEnabled(false)
+                    return false // A task that could not be removed may still launch at login.
+                }
+                // Prove the old task is absent before adding a second startup mechanism.
+                if (!loginTaskAbsent()) return false
+                // Creation may be refused even when reads/removal are allowed.
+            }
             if (desiredEnabled) {
                 val command = launcherCommand() ?: return false
                 if (readCurrentCommand() == command) return true
@@ -104,6 +121,22 @@ class WindowsStartupRegistration(
 
     /** False off Windows, where there is no startup entry to manage. */
     fun isSupported(): Boolean = isWindows(osName)
+
+    /** Delete only our value; distinguish absent from permission/read errors without localized text. */
+    private fun removeLegacyRunEntry(): Boolean {
+        val script = """
+            ${'$'}ErrorActionPreference = 'Stop'
+            try {
+                ${'$'}key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run', ${'$'}true)
+                if (${'$'}null -ne ${'$'}key) {
+                    try { ${'$'}key.DeleteValue('${valueName.replace("'", "''")}', ${'$'}false) } finally { ${'$'}key.Dispose() }
+                }
+                exit 0
+            } catch { exit 1 }
+        """.trimIndent()
+        val encoded = java.util.Base64.getEncoder().encodeToString(script.toByteArray(Charsets.UTF_16LE))
+        return commandRunner(listOf("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded)).exitCode == 0
+    }
 
     companion object {
         /** Per-user autostart key — writable without elevation. */

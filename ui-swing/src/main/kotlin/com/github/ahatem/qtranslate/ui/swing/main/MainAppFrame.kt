@@ -433,8 +433,9 @@ class MainAppFrame(
             }
         },
         onTranslate = { mainStore.dispatch(MainIntent.Translate()) },
-        onSelectionDetected = { text, location ->
+        onValidatedSelection = { text, location, valid ->
             runOnUi {
+                if (!valid()) return@runOnUi
                 val behavior = settingsStore.state.value.originalConfiguration.selectionBehavior
                 when (SelectionBehaviorRouter.decide(behavior, isQTranslateWindowActive())) {
                     SelectionAction.NONE -> Unit

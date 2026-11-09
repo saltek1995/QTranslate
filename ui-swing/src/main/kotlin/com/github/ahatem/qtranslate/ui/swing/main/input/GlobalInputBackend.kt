@@ -113,6 +113,8 @@ sealed interface GlobalInputEvent {
         val selfInjected: Boolean = false,
         /** Monotonic time in ms, never wall-clock. [Long.MIN_VALUE] when the backend provides none. */
         val timestampMs: Long,
+        /** Selection meaning, normalized only where the raw native keycode contract is known. */
+        val selectionKey: SelectionKey = SelectionKey.OTHER,
     ) : GlobalInputEvent
 
     /** Global mouse button press/release. */

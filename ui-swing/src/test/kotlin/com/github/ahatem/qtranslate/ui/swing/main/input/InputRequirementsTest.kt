@@ -33,9 +33,9 @@ class InputRequirementsTest {
     }
 
     @Test
-    fun `disabled hotkeys clear registrations and keyboard but keep opted-in mouse`() {
+    fun `disabled hotkeys keep keyboard and mouse for selection capture`() {
         assertEquals(
-            ResolvedInput(registerHotkeys = false, keyboard = false, mouseButtons = true, mouseMotion = true),
+            ResolvedInput(registerHotkeys = false, keyboard = true, mouseButtons = true, mouseMotion = true),
             InputRequirements.resolve(
                 state(
                     hotkeysEnabled = false,
@@ -93,9 +93,9 @@ class InputRequirementsTest {
     }
 
     @Test
-    fun `selection capture alone requests buttons and motion without keyboard change`() {
+    fun `selection capture alone requests keyboard buttons and motion`() {
         assertEquals(
-            ResolvedInput(registerHotkeys = false, keyboard = false, mouseButtons = true, mouseMotion = true),
+            ResolvedInput(registerHotkeys = false, keyboard = true, mouseButtons = true, mouseMotion = true),
             InputRequirements.resolve(
                 state(
                     hotkeysEnabled = false,

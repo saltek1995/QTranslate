@@ -5,6 +5,7 @@ import com.github.ahatem.qtranslate.api.plugin.NotificationType
 import com.github.ahatem.qtranslate.core.settings.data.Configuration
 import com.github.ahatem.qtranslate.core.settings.data.SettingsRepository
 import com.github.ahatem.qtranslate.core.settings.system.WindowsStartupRegistration
+import com.github.ahatem.qtranslate.core.settings.system.WindowsLoginTaskRegistration
 import com.github.ahatem.qtranslate.core.shared.notification.AppNotification
 import com.github.ahatem.qtranslate.core.shared.notification.NotificationCode
 import com.github.ahatem.qtranslate.core.shared.AppConstants
@@ -157,8 +158,13 @@ fun main(args: Array<String>) = runBlocking {
     // settings dialog or any other save path. Best effort — a failure only logs, never blocks
     // startup. Windows-only; other platforms keep their previous behavior exactly.
     if (WindowsStartupRegistration.isSupported()) {
-        val startupRegistration = WindowsStartupRegistration()
-        deps.appScope.launch {
+        val loginTask = WindowsLoginTaskRegistration()
+        val startupRegistration = WindowsStartupRegistration(loginTaskAbsent = loginTask::isAbsent, loginTask = { enabled, command ->
+            val result = loginTask.reconcile(enabled, command)
+            if (!result) logger.warn("Windows login task registration failed (enabled=$enabled); checking Run-key fallback")
+            result
+        })
+        deps.appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             settingsRepo.configuration
                 .map { it.launchOnSystemStartup }
                 .distinctUntilChanged()
