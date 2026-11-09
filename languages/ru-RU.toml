@@ -194,6 +194,7 @@ network = "Сеть"
 [settings_general]
 startup_updates_group = "Запуск и обновления"
 launch_on_startup = "Запускать при старте системы"
+start_minimized = "Запускать свёрнутым"
 auto_check_updates = "Автоматически проверять обновления"
 selection_group = "Выделение текста"
 selection_icon = "Показывать кнопку перевода после выделения текста"

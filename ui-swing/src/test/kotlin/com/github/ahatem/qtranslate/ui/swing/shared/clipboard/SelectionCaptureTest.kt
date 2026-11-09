@@ -25,6 +25,38 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SelectionCaptureTest {
+    @Test
+    fun `clipboard exception details never enter diagnostics`() = runTest {
+        val logger = RecordingLogger()
+        val clipboard = RecordingClipboard("PRIVATE_SENTINEL").apply {
+            snapshotFailure = IllegalStateException("PRIVATE_SENTINEL")
+        }
+        SelectionCapture(clipboard, FakeChangeMonitor(), { error("must not copy") }, logger).capture {}
+        assertTrue(logger.warns.isNotEmpty())
+        assertFalse(logger.warns.any { it.contains("PRIVATE_SENTINEL") })
+    }
+    @Test
+    fun `cancellation during monitor query prevents synthetic copy`() = runTest {
+        val clipboard = RecordingClipboard("original")
+        var copies = 0
+        var delivered = false
+        var job: kotlinx.coroutines.Job? = null
+        val monitor = object : ClipboardChangeMonitor {
+            override fun mark(): Long {
+                clipboard.simulateExternalCopy("new manual copy")
+                job!!.cancel()
+                return 0L
+            }
+            override fun hasChangedSince(token: Long) = true
+        }
+        val capture = SelectionCapture(clipboard, monitor, { copies++; true }, RecordingLogger())
+        job = launch { capture.capture { delivered = true } }
+        advanceUntilIdle()
+        assertEquals(0, copies)
+        assertFalse(delivered)
+        assertEquals("new manual copy", clipboard.text)
+        assertEquals(0, clipboard.restoreCount)
+    }
 
     private fun copyThatSelects(
         clipboard: RecordingClipboard,
@@ -511,10 +543,10 @@ class SelectionCaptureTest {
         assertEquals(CaptureResult.Failed(CaptureFailure.SNAPSHOT_FAILED), captured)
         assertEquals(0, clipboard.restoreAttempts)
         assertTrue(clipboard.published.isEmpty())
-        // The log carries only the failure message: there were no readable clipboard
-        // contents to leak, and none are attached.
+        // Failure messages can contain clipboard data even when retrieval fails.
+        // Only the exception type belongs in diagnostics.
         assertEquals(
-            listOf("Clipboard snapshot failed, skipping selection capture: owning application released the data"),
+            listOf("Clipboard snapshot failed, skipping selection capture: IOException"),
             logger.warns
         )
     }

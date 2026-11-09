@@ -1,11 +1,18 @@
 package com.github.ahatem.qtranslate.app
 
 import com.github.ahatem.qtranslate.core.plugin.PluginStatus
+import com.github.ahatem.qtranslate.core.plugin.storage.PluginFingerprint
+import com.github.ahatem.qtranslate.core.plugin.storage.PluginFingerprintRepository
+import com.github.ahatem.qtranslate.core.plugin.storage.PluginKeyValueStore
 import com.github.ahatem.qtranslate.core.settings.data.Configuration
 import com.github.ahatem.qtranslate.core.settings.data.SettingsRepository
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -106,24 +113,38 @@ suspend fun runReleaseArtifactProbe(args: Array<String>) {
             "assert a clean distribution shape"
     }
 
-    // The probe then isolates itself into the extracted copy so it writes nothing real.
+    // User state is always isolated, even if someone points this probe at an existing installation.
+    val probeData = java.nio.file.Files.createTempDirectory("qtranslate-release-probe-").toFile()
     System.clearProperty(AppDataLayout.LAUNCHER_PATH_PROPERTY)
-    System.setProperty(AppDataLayout.EXPLICIT_DATA_DIR_PROPERTY, distribution.absolutePath)
+    System.setProperty(AppDataLayout.EXPLICIT_DATA_DIR_PROPERTY, probeData.absolutePath)
     val layout = AppDataLayout.resolveForCurrentProcess(AppDataLayout.KEEP_INSTALLED_DATA)
     check(layout.mode == AppDataMode.CUSTOM) { "An explicit data directory must resolve as CUSTOM" }
-    check(layout.userDataRoot.canonicalFile == distribution.canonicalFile) {
+    check(layout.userDataRoot.canonicalFile == probeData.canonicalFile) {
         "Explicit app data directory was not honoured: ${layout.userDataRoot.absolutePath}"
     }
     val loggerFactory = ConsoleLoggerFactory(ConsoleLoggerFactory.LogLevel.INFO)
     val settings = SettingsRepository(
-        distribution,
+        probeData,
         Json { ignoreUnknownKeys = true; isLenient = true },
         loggerFactory.getLogger("ReleaseArtifactProbe")
     )
     val probeConfig = Configuration.DEFAULT.copy(autoCheckForUpdates = false)
     check(settings.updateConfiguration(probeConfig).isOk) { "Could not initialize isolated readiness settings" }
+    // Optional upgrade fixture, used only by this isolated release probe. Ordinary application
+    // startup never seeds or changes approved fingerprints.
+    val upgradeFingerprints = System.getProperty("qtranslate.probeApprovedFingerprints")?.let { path ->
+        Json.decodeFromString<List<PluginFingerprint>>(File(path).readText()).also { fingerprints ->
+            check(fingerprints.size == expectedIds.size && fingerprints.map { it.id }.toSet() == expectedIds)
+            check(fingerprints.all { it.jarHash.matches(Regex("[0-9a-f]{64}")) })
+            withProbeStorage { storageScope ->
+                PluginFingerprintRepository(probeData, Json, storageScope).storeFingerprints(fingerprints)
+                val values = PluginKeyValueStore(probeData, storageScope)
+                fingerprints.forEach { values.storeValue(it.id, UPGRADE_SENTINEL_KEY, "preserved") }
+            }
+        }
+    }
     val dependencies = buildDependencies(
-        appData = distribution,
+        appData = probeData,
         loggerFactory = loggerFactory,
         settingsRepo = settings,
         initialConfig = probeConfig,
@@ -147,7 +168,31 @@ suspend fun runReleaseArtifactProbe(args: Array<String>) {
         } finally {
             dependencies.mainStore.onShutdown()
             dependencies.httpClient.close()
-            dependencies.appScope.cancel()
+            dependencies.appScope.coroutineContext[Job]?.cancelAndJoin()
         }
+    }
+    if (upgradeFingerprints != null) {
+        withProbeStorage { storageScope ->
+            val actual = PluginFingerprintRepository(probeData, Json, storageScope).loadFingerprints()
+            check(actual == upgradeFingerprints.associate { it.id to it.jarHash }) {
+                "Approved plugin fingerprints changed during upgrade"
+            }
+            val values = PluginKeyValueStore(probeData, storageScope)
+            upgradeFingerprints.forEach {
+                check(values.getValue(it.id, UPGRADE_SENTINEL_KEY) == "preserved") { "Plugin upgrade lost stored settings" }
+            }
+        }
+        println("Upgrade readiness passed: approved plugin fingerprints and settings preserved")
+    }
+}
+
+private const val UPGRADE_SENTINEL_KEY = "artifact-probe-upgrade-sentinel"
+
+private suspend fun withProbeStorage(action: suspend (CoroutineScope) -> Unit) {
+    val job = SupervisorJob()
+    try {
+        action(CoroutineScope(job + Dispatchers.IO))
+    } finally {
+        job.cancelAndJoin()
     }
 }

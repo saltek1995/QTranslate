@@ -12,6 +12,19 @@ import kotlin.test.assertTrue
  * to the adapter model the listener consumes, and non-actionable events map to null.
  */
 class QInputBackendMappingTest {
+    @Test
+    fun `selection keys are normalized only for Windows raw keycodes`() {
+        for (code in listOf(0x41, 0x43) + (0x21..0x28)) {
+            val windows = assertIs<GlobalInputEvent.Key>(QInputBackend.toGlobalEvent(key(nativeCode = code), windowsKeys = true))
+            val other = assertIs<GlobalInputEvent.Key>(QInputBackend.toGlobalEvent(key(nativeCode = code), windowsKeys = false))
+            assertEquals(when (code) {
+                0x41 -> SelectionKey.SELECT_ALL
+                0x43 -> SelectionKey.COPY
+                else -> SelectionKey.NAVIGATION
+            }, windows.selectionKey)
+            assertEquals(SelectionKey.OTHER, other.selectionKey)
+        }
+    }
 
     private fun key(
         keyClass: QInputEvent.KeyClass = QInputEvent.KeyClass.CONTROL,

@@ -5,6 +5,7 @@ import com.github.ahatem.qtranslate.api.plugin.NotificationType
 import com.github.ahatem.qtranslate.core.settings.data.Configuration
 import com.github.ahatem.qtranslate.core.settings.data.SettingsRepository
 import com.github.ahatem.qtranslate.core.settings.system.WindowsStartupRegistration
+import com.github.ahatem.qtranslate.core.settings.system.WindowsLoginTaskRegistration
 import com.github.ahatem.qtranslate.core.shared.notification.AppNotification
 import com.github.ahatem.qtranslate.core.shared.notification.NotificationCode
 import com.github.ahatem.qtranslate.core.shared.AppConstants
@@ -44,16 +45,8 @@ fun main(args: Array<String>) = runBlocking {
     // on SingleInstanceGuard's accept thread.
     var pendingFocusRequest = false
 
-    // A login launch registered by WindowsStartupRegistration carries `--startup`; a manual
-    // launch never does — even with `launchOnSystemStartup` enabled — so the setting alone
-    // must never decide visibility (#226).
+    // The login marker and the independent visibility preference are evaluated separately.
     val launchedFromSystemStartup = WindowsStartupRegistration.isStartupLaunch(args)
-    // Hidden only when the window can actually be restored: without a tray the process would
-    // be invisible with no recovery path, so fall back to a visible window.
-    val startHidden = WindowsStartupRegistration.shouldStartHidden(
-        launchedFromStartup = launchedFromSystemStartup,
-        traySupported = SystemTray.isSupported()
-    )
 
     if (!SingleInstanceGuard.tryLock(onFocusRequested = {
             SwingUtilities.invokeLater {
@@ -105,9 +98,6 @@ fun main(args: Array<String>) = runBlocking {
                     "${AppDataLayout.PORTABLE_MARKER}; nothing was moved or deleted."
         )
     }
-    if (startHidden) {
-        logger.info("Launched from Windows startup — starting hidden in the system tray")
-    }
 
     val json         = Json { ignoreUnknownKeys = true; isLenient = true }
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineName("AppScope"))
@@ -122,6 +112,12 @@ fun main(args: Array<String>) = runBlocking {
         Configuration.DEFAULT
     }
 
+    val startHidden = WindowsStartupRegistration.shouldStartHidden(
+        launchedFromStartup = launchedFromSystemStartup,
+        traySupported = SystemTray.isSupported(),
+        startMinimized = initialConfig.startMinimized,
+    )
+    if (startHidden) logger.info("Starting hidden in the system tray")
     logger.info("Configuration loaded: theme=${initialConfig.themeId}, scale=${initialConfig.uiScale}")
 
     val deps = buildDependencies(
@@ -157,8 +153,13 @@ fun main(args: Array<String>) = runBlocking {
     // settings dialog or any other save path. Best effort — a failure only logs, never blocks
     // startup. Windows-only; other platforms keep their previous behavior exactly.
     if (WindowsStartupRegistration.isSupported()) {
-        val startupRegistration = WindowsStartupRegistration()
-        deps.appScope.launch {
+        val loginTask = WindowsLoginTaskRegistration()
+        val startupRegistration = WindowsStartupRegistration(loginTaskAbsent = loginTask::isAbsent, loginTask = { enabled, command ->
+            val result = loginTask.reconcile(enabled, command)
+            if (!result) logger.warn("Windows login task registration failed (enabled=$enabled); checking Run-key fallback")
+            result
+        })
+        deps.appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             settingsRepo.configuration
                 .map { it.launchOnSystemStartup }
                 .distinctUntilChanged()

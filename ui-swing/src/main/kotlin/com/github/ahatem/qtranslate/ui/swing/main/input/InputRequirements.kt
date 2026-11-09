@@ -20,7 +20,7 @@ object InputRequirements {
     fun resolve(state: InputRuntimeState): ResolvedInput = ResolvedInput(
         registerHotkeys = state.effectiveHotkeysEnabled,
         // Raw keyboard tracking follows the configured switch, not the paused one.
-        keyboard = state.globalHotkeysEnabled && state.doubleCtrlEnabled,
+        keyboard = (state.globalHotkeysEnabled && state.doubleCtrlEnabled) || state.selectionCaptureEnabled,
         mouseButtons = state.selectionCaptureEnabled || state.dismissOnOutsideClickEnabled,
         mouseMotion = state.selectionCaptureEnabled
     )

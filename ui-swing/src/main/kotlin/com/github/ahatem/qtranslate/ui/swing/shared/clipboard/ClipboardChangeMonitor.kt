@@ -28,9 +28,49 @@ object ClipboardChangeMonitors {
 
     fun create(clipboard: SystemClipboard, logger: Logger): ClipboardChangeMonitor {
         if (System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) {
-            WindowsClipboardChangeMonitor.create(logger)?.let { return it }
+            WindowsClipboardChangeMonitor.create(logger)?.let {
+                return RecoveringClipboardChangeMonitor(it, SignatureClipboardChangeMonitor(clipboard), logger)
+            }
         }
         return SignatureClipboardChangeMonitor(clipboard)
+    }
+}
+
+/**
+ * Chooses an observer at the start of a capture and pins it until the next mark. SelectionCapture
+ * serializes these transactions. If Windows cannot yet supply a native generation (including
+ * before the first clipboard use after login), a signature can still prove a content change.
+ * Native availability is retried on every new capture, never switched mid-transaction.
+ */
+internal class RecoveringClipboardChangeMonitor(
+    private val primary: ClipboardChangeMonitor,
+    private val fallback: ClipboardChangeMonitor,
+    private val logger: Logger,
+) : ClipboardChangeMonitor {
+    private data class Observation(val id: Long, val monitor: ClipboardChangeMonitor, val token: Long)
+    private var observation: Observation? = null
+    private var nextId = 0L
+    private var usingFallback = false
+
+    override fun mark(): Long? {
+        observation = null
+        val primaryToken = primary.mark()
+        val monitor = if (primaryToken != null) primary else fallback
+        val token = primaryToken ?: fallback.mark() ?: return null
+        val fallbackNow = monitor === fallback
+        if (fallbackNow != usingFallback) {
+            if (fallbackNow) logger.warn("Native clipboard counter unavailable; using content-change detection")
+            else logger.info("Native clipboard counter recovered")
+            usingFallback = fallbackNow
+        }
+        val id = ++nextId
+        observation = Observation(id, monitor, token)
+        return id
+    }
+
+    override fun hasChangedSince(token: Long): Boolean {
+        val current = observation ?: return false
+        return current.id == token && current.monitor.hasChangedSince(current.token)
     }
 }
 

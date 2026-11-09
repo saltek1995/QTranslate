@@ -115,7 +115,10 @@ internal class QInputBackend(
     }
 
     companion object {
-        fun toGlobalEvent(event: QInputEvent): GlobalInputEvent? = when (event.kind()) {
+        fun toGlobalEvent(
+            event: QInputEvent,
+            windowsKeys: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows"),
+        ): GlobalInputEvent? = when (event.kind()) {
             // QTranslate actions are edge-triggered on press; releases carry no action.
             QInputEvent.Kind.HOTKEY -> if (event.isPressed) GlobalInputEvent.Hotkey(event.id()) else null
             QInputEvent.Kind.KEY -> GlobalInputEvent.Key(
@@ -131,6 +134,7 @@ internal class QInputBackend(
                 injected = event.isInjected,
                 repeat = event.isRepeat,
                 selfInjected = event.isSelfInjected,
+                selectionKey = if (windowsKeys) WindowsSelectionKeys.classify(event.nativeCode()) else SelectionKey.OTHER,
                 timestampMs = if (event.timestampMicros() > 0) event.timestampMicros() / 1000 else Long.MIN_VALUE
             )
             QInputEvent.Kind.MOUSE_BUTTON -> GlobalInputEvent.MouseButton(

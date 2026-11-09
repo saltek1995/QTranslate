@@ -8,6 +8,38 @@ import kotlin.test.assertTrue
 class SelectionGestureTrackerTest {
 
     @Test
+    fun `double and triple click select without dragging`() {
+        var now = 100L
+        val tracker = SelectionGestureTracker(clockMs = { now })
+        tracker.onPressed(Point(10, 10))
+        assertFalse(tracker.onReleased())
+        now += 100
+        tracker.onPressed(Point(11, 10))
+        assertTrue(tracker.onReleased())
+        now += 100
+        tracker.onPressed(Point(11, 11))
+        assertTrue(tracker.onReleased())
+    }
+
+    @Test
+    fun `slow distant and reset clicks do not select`() {
+        var now = 100L
+        val tracker = SelectionGestureTracker(clockMs = { now })
+        tracker.onPressed(Point(0, 0))
+        assertFalse(tracker.onReleased())
+        now += 501
+        tracker.onPressed(Point(0, 0))
+        assertFalse(tracker.onReleased())
+        now += 100
+        tracker.onPressed(Point(100, 100))
+        assertFalse(tracker.onReleased())
+        tracker.reset()
+        now += 100
+        tracker.onPressed(Point(100, 100))
+        assertFalse(tracker.onReleased())
+    }
+
+    @Test
     fun `click without drag is not a selection`() {
         val tracker = SelectionGestureTracker()
         tracker.onPressed(Point(10, 10))

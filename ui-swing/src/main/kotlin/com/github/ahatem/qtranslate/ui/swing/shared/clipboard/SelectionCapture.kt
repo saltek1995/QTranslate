@@ -43,7 +43,7 @@ class SelectionCapture(
         mutex.withLock {
             val snapshot = readSnapshot()
             if (snapshot is ClipboardSnapshotResult.Failed) {
-                logger.warn("Clipboard snapshot failed, skipping selection capture: ${snapshot.cause?.message}")
+                logger.warn("Clipboard snapshot failed, skipping selection capture: ${snapshot.cause?.javaClass?.simpleName}")
                 currentCoroutineContext().ensureActive()
                 callback(CaptureResult.Failed(CaptureFailure.SNAPSHOT_FAILED))
                 return
@@ -58,13 +58,16 @@ class SelectionCapture(
                 return
             }
 
+            // No copy has started yet: cancellation here must not restore an older snapshot
+            // over a user's manual copy that arrived during a blocking clipboard query.
+            currentCoroutineContext().ensureActive()
             val outcome: CopyOutcome = try {
                 copyAndRead(token)
             } catch (cancelled: CancellationException) {
                 restoreShielded(snapshot)
                 throw cancelled
             } catch (e: Exception) {
-                logger.warn("Selection capture failed: ${e.message}")
+                logger.warn("Selection capture failed: ${e.javaClass.simpleName}")
                 restoreShielded(snapshot)
                 currentCoroutineContext().ensureActive()
                 callback(CaptureResult.Failed(CaptureFailure.CAPTURE_ERROR))
@@ -122,7 +125,7 @@ class SelectionCapture(
                     is ClipboardReadOutcome.Failed -> {
                         logger.warn(
                             "Clipboard read failed after a confirmed change; " +
-                                "selection capture inconclusive: ${read.cause.message}"
+                                "selection capture inconclusive: ${read.cause.javaClass.simpleName}"
                         )
                         CopyOutcome.ReadFailed(read.cause)
                     }
@@ -170,7 +173,7 @@ class SelectionCapture(
             if (failure == null) return true
             // Only a busy clipboard is worth retrying; anything else fails fast.
             if (failure !is IllegalStateException || attempt >= restoreMaxAttempts) {
-                logger.warn("Failed to restore clipboard after selection capture: ${failure.message}")
+                logger.warn("Failed to restore clipboard after selection capture: ${failure.javaClass.simpleName}")
                 return false
             }
             delay(restoreRetryDelayMs)

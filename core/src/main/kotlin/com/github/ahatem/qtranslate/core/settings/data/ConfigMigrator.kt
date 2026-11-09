@@ -24,7 +24,7 @@ object ConfigMigrator {
      * would skip every migration it needs. A configuration this build creates from scratch is
      * stamped with this value instead.
      */
-    internal const val CURRENT_VERSION = 9
+    internal const val CURRENT_VERSION = 10
 
     /** The old defaults, frozen: this is what "the user never changed it" looked like. */
     private const val LEGACY_POPUP_IDLE_SECONDS = 3
@@ -203,6 +203,11 @@ object ConfigMigrator {
                     hotkeys = legacy,
                     ocrHotkeys = mergedOcr + missing,
                 )
+            }
+            9 -> {
+                // The optional setting defaults to false for existing installations. Preserve
+                // an explicit choice if a file already carries it; all other settings stay intact.
+                config.copy(configVersion = 10)
             }
             else -> {
                 logger.warn("ConfigMigrator: unknown configVersion ${config.configVersion} — returning unchanged")

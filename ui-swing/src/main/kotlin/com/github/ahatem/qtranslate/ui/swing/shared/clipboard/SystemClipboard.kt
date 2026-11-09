@@ -3,6 +3,7 @@ package com.github.ahatem.qtranslate.ui.swing.shared.clipboard
 import java.awt.Image
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.Clipboard
 import java.awt.datatransfer.Transferable
 import java.awt.datatransfer.UnsupportedFlavorException
 import java.awt.image.BufferedImage
@@ -169,7 +170,9 @@ private class SnapshotTransferable(
 }
 
 /** Real clipboard backed by AWT. This is the only place that touches [Toolkit]. */
-class AwtSystemClipboard : SystemClipboard {
+class AwtSystemClipboard(
+    private val clipboardProvider: () -> Clipboard = { Toolkit.getDefaultToolkit().systemClipboard },
+) : SystemClipboard {
 
     override fun snapshot(): ClipboardSnapshotResult = runCatching {
         val contents = systemClipboard.getContents(null)
@@ -189,8 +192,8 @@ class AwtSystemClipboard : SystemClipboard {
         val flavors = contents.transferDataFlavors.joinToString(",") {
             "${it.mimeType}:${it.representationClass?.name}"
         }
-        val text = if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
-            runCatching { clipboard.getData(DataFlavor.stringFlavor).toString() }.getOrNull()
+        val text = if (contents.isDataFlavorSupported(DataFlavor.stringFlavor)) {
+            contents.getTransferData(DataFlavor.stringFlavor).toString()
         } else {
             null
         }
@@ -208,5 +211,5 @@ class AwtSystemClipboard : SystemClipboard {
         }
     }
 
-    private val systemClipboard get() = Toolkit.getDefaultToolkit().systemClipboard
+    private val systemClipboard get() = clipboardProvider()
 }
