@@ -194,6 +194,7 @@ popups = "Popups"
 [settings_general]
 startup_updates_group = "Startup & Updates"
 launch_on_startup = "Launch on system startup"
+start_minimized = "Start minimized"
 auto_check_updates = "Automatically check for updates"
 selection_group = "Text Selection"
 selection_behavior = "After selecting text"

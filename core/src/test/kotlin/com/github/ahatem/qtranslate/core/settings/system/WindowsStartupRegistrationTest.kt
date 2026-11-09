@@ -14,6 +14,17 @@ import kotlin.test.assertTrue
  * so the suite is safe on any OS and in CI.
  */
 class WindowsStartupRegistrationTest {
+    @Test
+    fun `start minimized hides manual launches but never strands a process without a tray`() {
+        for (login in listOf(false, true)) {
+            for (minimized in listOf(false, true)) {
+                for (tray in listOf(false, true)) {
+                    assertEquals((login || minimized) && tray,
+                        WindowsStartupRegistration.shouldStartHidden(login, tray, minimized))
+                }
+            }
+        }
+    }
 
     private class FakeReg(
         var queryOutput: String = "",
@@ -332,7 +343,7 @@ class WindowsStartupRegistrationTest {
     fun `manual launch shows the window regardless of the persisted startup setting`() {
         // The `launchOnSystemStartup` setting is deliberately not an input here: a user with
         // startup enabled who launches QTranslate by hand must still get the main window.
-        // Only the explicit --startup invocation marker hides it.
+        // The independent start-minimized preference is off in this default case.
         assertEquals(false, WindowsStartupRegistration.isStartupLaunch(arrayOf()))
         assertEquals(
             false,

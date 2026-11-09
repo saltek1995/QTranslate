@@ -183,6 +183,8 @@ data class Configuration(
 
     // ---- General Behaviour ----
     val launchOnSystemStartup: Boolean = false,
+    /** Hide the initial window in the tray on manual launches too, when a tray is available. */
+    val startMinimized: Boolean = false,
     val autoCheckForUpdates: Boolean = true,
     val isGlobalHotkeysEnabled: Boolean = true,
     val selectionBehavior: SelectionBehavior = SelectionBehavior.OFF,
@@ -379,6 +381,7 @@ data class Configuration(
                 hotkeys                      = HotkeyBinding.LEGACY_DEFAULTS,
                 ocrHotkeys                   = HotkeyBinding.OCR_DEFAULTS,
                 launchOnSystemStartup        = false,
+                startMinimized               = false,
                 isGlobalHotkeysEnabled       = true,
                 selectionBehavior            = SelectionBehavior.OFF,
                 selectionReadSource          = SelectionReadSource.TRANSLATION,

@@ -62,7 +62,15 @@ include gated lifecycle races, deferred UI delivery, actual AWT Transferable fai
 PowerShell executed with stubbed scheduler mutations on Windows. These tests do not prove a real
 sign-out/sign-in, elevation consent or physical keyboard input on the user's installed copy.
 
-Fork build identity: `1.5.0-saltek.1`. Runtime/About and release validation use the same version.
+Fork build identity: `1.5.0-saltek.2`. Runtime/About and release validation use the same version.
 An elevated application can create the Highest task; an ordinary application creates a Limited
 interactive task and preserves an already configured matching Highest task. Windows does not allow
 an ordinary process to silently grant itself elevated startup rights.
+
+The General settings page also offers Start minimized beside autostart. This separate preference
+defaults to false and applies to manual launches as well. Schema v10 preserves existing settings
+and explicit choices. Apply/Cancel retain the usual draft behavior. Initial presentation waits for
+actual tray installation and only shows the window when needed; it never hides an explicit restore
+request that arrived while initialization was queued. Tests cover migration, persistence, checkbox
+placement and draft behavior, failed tray installation, and early restore ordering without desktop
+automation.

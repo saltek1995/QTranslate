@@ -45,16 +45,8 @@ fun main(args: Array<String>) = runBlocking {
     // on SingleInstanceGuard's accept thread.
     var pendingFocusRequest = false
 
-    // A login launch registered by WindowsStartupRegistration carries `--startup`; a manual
-    // launch never does — even with `launchOnSystemStartup` enabled — so the setting alone
-    // must never decide visibility (#226).
+    // The login marker and the independent visibility preference are evaluated separately.
     val launchedFromSystemStartup = WindowsStartupRegistration.isStartupLaunch(args)
-    // Hidden only when the window can actually be restored: without a tray the process would
-    // be invisible with no recovery path, so fall back to a visible window.
-    val startHidden = WindowsStartupRegistration.shouldStartHidden(
-        launchedFromStartup = launchedFromSystemStartup,
-        traySupported = SystemTray.isSupported()
-    )
 
     if (!SingleInstanceGuard.tryLock(onFocusRequested = {
             SwingUtilities.invokeLater {
@@ -106,9 +98,6 @@ fun main(args: Array<String>) = runBlocking {
                     "${AppDataLayout.PORTABLE_MARKER}; nothing was moved or deleted."
         )
     }
-    if (startHidden) {
-        logger.info("Launched from Windows startup — starting hidden in the system tray")
-    }
 
     val json         = Json { ignoreUnknownKeys = true; isLenient = true }
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineName("AppScope"))
@@ -123,6 +112,12 @@ fun main(args: Array<String>) = runBlocking {
         Configuration.DEFAULT
     }
 
+    val startHidden = WindowsStartupRegistration.shouldStartHidden(
+        launchedFromStartup = launchedFromSystemStartup,
+        traySupported = SystemTray.isSupported(),
+        startMinimized = initialConfig.startMinimized,
+    )
+    if (startHidden) logger.info("Starting hidden in the system tray")
     logger.info("Configuration loaded: theme=${initialConfig.themeId}, scale=${initialConfig.uiScale}")
 
     val deps = buildDependencies(

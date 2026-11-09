@@ -189,13 +189,16 @@ class WindowsStartupRegistration(
         /**
          * Whether the main window must stay hidden at startup (#226).
          *
-         * Pure so it stays deterministic in tests: hidden only when this invocation came from
-         * the startup registration *and* a tray icon can actually restore the window. Starting
+         * Pure so it stays deterministic in tests: a login launch or the independent
+         * start-minimized preference hides the window only when a tray can restore it. Starting
          * hidden without a tray would leave an invisible process with no recovery path, so a
          * missing tray always falls back to a visible window.
          */
-        fun shouldStartHidden(launchedFromStartup: Boolean, traySupported: Boolean): Boolean =
-            launchedFromStartup && traySupported
+        fun shouldStartHidden(
+            launchedFromStartup: Boolean,
+            traySupported: Boolean,
+            startMinimized: Boolean = false,
+        ): Boolean = (launchedFromStartup || startMinimized) && traySupported
 
         /**
          * Encodes a startup [command] for the `/d` argument of `reg add` when invoked via

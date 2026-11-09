@@ -648,7 +648,7 @@ class MainAppFrame(
             observeStateAndEvents()
             // A login launch stays hidden in the tray: the window is never shown, not shown
             // and re-hidden, so nothing flashes and no taskbar entry appears (#226).
-            isVisible = !initiallyHidden
+            presentInitialWindow(initiallyHidden, trayBinding.isInstalled) { isVisible = true }
 
             // applyOrientation must run AFTER switchLayout's invokeLater has fired.
             // switchLayout() queues an invokeLater internally — if we call

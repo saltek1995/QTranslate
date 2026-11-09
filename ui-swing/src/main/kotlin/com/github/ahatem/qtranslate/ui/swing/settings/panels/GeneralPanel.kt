@@ -22,6 +22,7 @@ class GeneralPanel(
 ) : SettingsPanel() {
 
     private lateinit var launchCheckbox:  JCheckBox
+    private lateinit var minimizedCheckbox: JCheckBox
     private lateinit var updatesCheckbox: JCheckBox
     private lateinit var historyCheckbox: JCheckBox
     private lateinit var clearCheckbox:   JCheckBox
@@ -48,6 +49,11 @@ class GeneralPanel(
             text = localizationManager.getString("settings_general.launch_on_startup"),
             selected = false,
             onChange = { enabled -> applyDraft(store) { it.copy(launchOnSystemStartup = enabled) } }
+        )
+        minimizedCheckbox = addCheckbox(
+            text = localizationManager.getString("settings_general.start_minimized"),
+            selected = false,
+            onChange = { enabled -> applyDraft(store) { it.copy(startMinimized = enabled) } }
         )
         updatesCheckbox = addCheckbox(
             text = localizationManager.getString("settings_general.auto_check_updates"),
@@ -124,6 +130,7 @@ class GeneralPanel(
 
         withoutTrigger {
             launchCheckbox.isSelected  = c.launchOnSystemStartup
+            minimizedCheckbox.isSelected = c.startMinimized
             updatesCheckbox.isSelected = c.autoCheckForUpdates
             for (index in 0 until selectionBehaviorCombo.itemCount) {
                 if (selectionBehaviorCombo.getItemAt(index).behavior == c.selectionBehavior) {
