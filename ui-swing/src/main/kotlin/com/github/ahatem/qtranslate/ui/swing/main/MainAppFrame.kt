@@ -241,6 +241,15 @@ class MainAppFrame(
             onListen = { mainStore.dispatch(MainIntent.ListenToText(TextSource.Input)) },
             onStopListening = { mainStore.dispatch(MainIntent.StopTTS) },
             onCopy = { mainStore.state.value.translatedText.copyToClipboard() },
+            onReplaceSelection = { translation ->
+                // The popup is hidden; Windows chooses the next foreground window.
+                // Never send paste into another QTranslate window that gained focus instead.
+                if (!isQTranslateWindowActive()) {
+                    pasteTextToActiveApp(translation)
+                } else {
+                    logger.warn("Popup replacement skipped: QTranslate still has focus")
+                }
+            },
             onSavePosition = { pos ->
                 settingsStore.dispatch(
                     SettingsIntent.ToggleSetting { it.copy(popupLastKnownPosition = pos) }

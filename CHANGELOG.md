@@ -9,6 +9,13 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-11-17
+
+### Added
+- Quick Translate has a **Replace selection with translation** button beside Copy. It inserts the displayed translation into the source application without another translation request. The button is disabled while translating or when the result is empty; the existing replacement hotkey remains available.
+
+## [1.5.1] — 2026-11-09
+
 ### Added
 - **Two experimental themes, Ioskeley Dark and Ioskeley Light**, built on the Ioskeley Mono visual identity: a warm-neutral monochrome canvas where typography and state carry the hierarchy and a single accent — Proof Red — appears only as a rare structural mark. Experimental for now; they do not change the default theme or any existing selection
 - **Ioskeley Dark Proof and Ioskeley Light Proof**, variants of the Ioskeley themes in which Proof Red also marks the focused state: focused fields, the focused default button and focused check boxes and radio buttons carry a red border instead of an ink one. Everything else is identical to the base Ioskeley themes, so the two intensities can be compared directly in the theme picker
@@ -335,7 +342,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-[Unreleased]: https://github.com/ahatem/QTranslate/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/saltek1995/QTranslate/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/saltek1995/QTranslate/compare/v1.5.1...v1.5.2
+[1.5.1]: https://github.com/saltek1995/QTranslate/releases/tag/v1.5.1
 [1.5.0]: https://github.com/ahatem/QTranslate/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/ahatem/QTranslate/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/ahatem/QTranslate/compare/v1.3.0...v1.4.0

@@ -63,7 +63,11 @@ include gated lifecycle races, deferred UI delivery, actual AWT Transferable fai
 PowerShell executed with stubbed scheduler mutations on Windows. These tests do not prove a real
 sign-out/sign-in, elevation consent or physical keyboard input on the user's installed copy.
 
-Release identity: `1.5.1`. Runtime/About and release validation use the same version.
+Release identity: `1.5.2`. Runtime/About and release validation use the same version.
+
+Version 1.5.2 adds a replacement button beside Copy in Quick Translate. It dismisses the
+popup and pastes the displayed translation using the existing injector, without another
+translation request. The user verified replacement in Windows before release preparation.
 An elevated application can create the Highest task; an ordinary application creates a Limited
 interactive task and preserves an already configured matching Highest task. Windows does not allow
 an ordinary process to silently grant itself elevated startup rights.

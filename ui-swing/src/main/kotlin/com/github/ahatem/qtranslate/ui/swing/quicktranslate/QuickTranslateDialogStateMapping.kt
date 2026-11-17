@@ -61,6 +61,7 @@ internal fun buildQuickTranslateDialogState(
             unpinTooltip = localizer.getString("common.unpin"),
             swapTooltip = localizer.getString("main_window_language_bar.swap_languages_tooltip"),
             loadingText = localizer.getString("common.loading"),
+            replaceTooltip = localizer.getString("settings_hotkeys.action_replace"),
             // The definition's own menu answers to the shared strings, so the popup's definition
             // reads the same as the main window's and a dictionary entry's.
             contextMenuLabels = { key -> localizer.getString("common.$key") }

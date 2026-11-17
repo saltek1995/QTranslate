@@ -54,7 +54,8 @@ class QuickTranslateDialog(
     private val onPinToggled: () -> Unit,
     private val onSourceLanguageSelected: (LanguageCode) -> Unit = {},
     private val onTargetLanguageSelected: (LanguageCode) -> Unit = {},
-    private val onSwapLanguages: () -> Unit = {}
+    private val onSwapLanguages: () -> Unit = {},
+    private val onReplaceSelection: (String) -> Unit = {}
 ) : JDialog(null as Frame?, ModalityType.MODELESS), Renderable<QuickTranslateDialogState> {
 
     private companion object {
@@ -122,6 +123,7 @@ class QuickTranslateDialog(
     private val pinButton = createToolbarButton(iconManager, Icons.PIN, 14)
     private val listenButton = createToolbarButton(iconManager, Icons.SPEAK, 14)
     private val copyButton = createToolbarButton(iconManager, Icons.COPY, 14)
+    private val replaceButton = createToolbarButton(iconManager, Icons.EDIT, 14)
     private val closeButton = createToolbarButton(iconManager, Icons.CLOSE, 16)
 
     // content: one result viewport holding the primary provider, its definition,
@@ -202,6 +204,7 @@ class QuickTranslateDialog(
      * decide whether a press means play or stop.
      */
     private var currentIsTtsPlaying = false
+    private var currentTranslation = ""
 
     init {
         focusableWindowState = false
@@ -303,6 +306,7 @@ class QuickTranslateDialog(
     // Full content sync. Sibling provider completion only refreshes that provider in
     // place; the popup size is left alone and the result viewport scrolls instead.
     private fun updateContent(state: QuickTranslateDialogState) {
+        currentTranslation = state.translatedText
         this.isPinned = state.isPinned
         // Only while something is already on screen: before that the popup is withheld and the
         // standalone loading indicator covers the wait.
@@ -345,6 +349,8 @@ class QuickTranslateDialog(
             KeyEvent.VK_P
         )
         copyButton.toolTipText = withShortcut(state.strings.copyTooltip, KeyEvent.VK_C)
+        replaceButton.toolTipText = state.strings.replaceTooltip
+        replaceButton.accessibleContext.accessibleName = state.strings.replaceTooltip
         swapButton.toolTipText = withShortcut(state.strings.swapTooltip, KeyEvent.VK_S)
         closeButton.toolTipText = state.strings.closeTooltip
 
@@ -365,6 +371,7 @@ class QuickTranslateDialog(
 
         listenButton.isEnabled = playing || (state.actionsState.canListen && !state.isLoading)
         copyButton.isEnabled = state.actionsState.canCopy && !state.isLoading
+        replaceButton.isEnabled = state.actionsState.canCopy && !state.isLoading && state.translatedText.isNotBlank()
     }
 
     private fun renderProviders(state: QuickTranslateDialogState) {
@@ -639,6 +646,16 @@ class QuickTranslateDialog(
             onCopy()
             showCopyFeedback()
         }
+        replaceButton.addActionListener {
+            if (!replaceButton.isEnabled || currentTranslation.isBlank()) return@addActionListener
+            val translation = currentTranslation
+            replaceButton.isEnabled = false
+            // Hide synchronously before dispatching paste: clicking the popup activates it.
+            // Let AWT finish its focus events before injecting into the source application.
+            hideDialog()
+            onDismiss()
+            EventQueue.invokeLater { onReplaceSelection(translation) }
+        }
         closeButton.addActionListener { onDismiss() }
 
         val separator = JPanel().apply {
@@ -663,6 +680,7 @@ class QuickTranslateDialog(
             add(pinButton)
             add(listenButton)
             add(copyButton)
+            add(replaceButton)
 
             add(Box.createRigidArea(Dimension(6, 0)))
             add(separator)
